@@ -3,11 +3,18 @@ package com.custardcoding.fsa;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.Proxy.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
-import org.codehaus.jackson.map.ObjectMapper;
+import java.util.Map;
+import java.util.UUID;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.converter.json.MappingJacksonHttpMessageConverter;
 import org.springframework.web.client.RestTemplate;
@@ -16,7 +23,9 @@ import org.springframework.web.client.RestTemplate;
  * 
  */
 public class App {
-    private static final List<ArrayList<EstablishmentDetail>> results = new ArrayList<ArrayList<EstablishmentDetail>>();
+    private static final String PASS = "Pass";
+    private static final String IMPROVEMENT_REQUIRED = "Improvement Required";
+    
     private static final ArrayList<EstablishmentDetail> fives = new ArrayList<EstablishmentDetail>();
     private static final ArrayList<EstablishmentDetail> fours = new ArrayList<EstablishmentDetail>();
     private static final ArrayList<EstablishmentDetail> threes = new ArrayList<EstablishmentDetail>();
@@ -26,20 +35,24 @@ public class App {
     private static final ArrayList<EstablishmentDetail> passes = new ArrayList<EstablishmentDetail>();
     private static final ArrayList<EstablishmentDetail> improvementRequireds = new ArrayList<EstablishmentDetail>();
     
-    private static final RestTemplate restTemplate = new RestTemplate();
+    private static final List<ArrayList<EstablishmentDetail>> results = new ArrayList<ArrayList<EstablishmentDetail>>() {{
+        add(fives);
+        add(fours);
+        add(threes);
+        add(twos);
+        add(ones);
+        add(zeros);
+        add(passes);
+        add(improvementRequireds);
+    }};
+    
+    private static RestTemplate restTemplate = new RestTemplate();
     
     public static void main(String[] args) throws IOException {
-        List<String> names = Arrays.asList("Waitrose");
-//        List<String> names = Arrays.asList("Waitrose", "Aldi", "Lidl", "Asda", "Morrisons", "Sainsburys", "Tesco");
-        
-        results.add(fives);
-        results.add(fours);
-        results.add(threes);
-        results.add(twos);
-        results.add(ones);
-        results.add(zeros);
-        results.add(passes);
-        results.add(improvementRequireds);
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setProxy(new Proxy(Type.HTTP, new InetSocketAddress("proxy.costcutterhq.com", 8080)));
+        restTemplate = new RestTemplate(requestFactory);
+//        restTemplate = new RestTemplate();
         
         MappingJacksonHttpMessageConverter converter = new MappingJacksonHttpMessageConverter();
 
@@ -51,7 +64,8 @@ public class App {
         mc.add(converter);
         restTemplate.setMessageConverters(mc);
         
-        for (String name : names) {
+        for (String name : Collections.singletonList("Waitrose")) {
+//        for (String name : Arrays.asList("Waitrose", "Aldi", "Lidl", "Asda", "Morrisons", "Sainsburys", "Tesco")) {
             makeCall(name);
         }
     }
@@ -118,7 +132,7 @@ public class App {
                !businessName.contains("Costa") &&
                !businessName.contains("Eurest") &&
                !businessName.contains("Greggs") &&
-               !businessName.contains("Krispy ") &&
+               !businessName.contains("Krispy") &&
                !businessName.contains("Subway") &&
                !businessName.contains("Avenance") &&
                !businessName.contains("distribution");
@@ -139,7 +153,10 @@ public class App {
         
         Result result = restTemplate.getForObject(url, Result.class);
         
-        for (EstablishmentDetail detail : result.getFhrsEstablishment().getEstablishmentCollection().getEstablishmentDetails()) {
+        List<EstablishmentDetail> establishmentDetails = result.getFhrsEstablishment().getEstablishmentCollection().getEstablishmentDetails();
+//        establishmentDetails = removeDuplicates(establishmentDetails);
+        
+        for (EstablishmentDetail detail : establishmentDetails) {
             if (goodDetail(detail)) {
                 if (detail.getRatingValue().equals("5")) {
                     fives.add(detail);
@@ -153,9 +170,9 @@ public class App {
                     ones.add(detail);
                 } else if (detail.getRatingValue().equals("0")) {
                     zeros.add(detail);
-                } else if (detail.getRatingValue().equals("Pass")) {
+                } else if (detail.getRatingValue().equalsIgnoreCase(PASS)) {
                     passes.add(detail);
-                } else if (detail.getRatingValue().equals("Improvement Required")) {
+                } else if (detail.getRatingValue().equalsIgnoreCase(IMPROVEMENT_REQUIRED)) {
                     improvementRequireds.add(detail);
                 }
             }
@@ -208,5 +225,36 @@ public class App {
         }
         
         return builder;
+    }
+
+    private static List<EstablishmentDetail> removeDuplicates(List<EstablishmentDetail> establishmentDetails) {
+        Map<String, EstablishmentDetail> map = new HashMap<String, EstablishmentDetail>();
+        
+        for (EstablishmentDetail detail : establishmentDetails) {
+            if (null == detail.getPostCode()) {
+                map.put(UUID.randomUUID().toString(), detail);
+            } else {
+                String formattedPostcode = getFormattedPostcode(detail);
+                if (map.containsKey(formattedPostcode)) {
+                    try {
+                        if (Integer.valueOf(map.get(formattedPostcode).getRatingValue()) > Integer.valueOf(detail.getRatingValue())) {
+                            map.put(formattedPostcode, detail);
+                        }
+                    } catch (NumberFormatException ex) {
+                        if (PASS.equals(map.get(formattedPostcode).getRatingValue())) {
+                            map.put(formattedPostcode, detail);
+                        }
+                    }
+                } else {
+                    map.put(formattedPostcode, detail);
+                }
+            }
+        }
+        
+        return new ArrayList<EstablishmentDetail>(map.values());
+    }
+
+    private static String getFormattedPostcode(EstablishmentDetail detail) {
+        return detail.getPostCode().trim().replace(" ", "").toLowerCase();
     }
 }
