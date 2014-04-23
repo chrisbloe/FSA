@@ -6,6 +6,8 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.Proxy.Type;
+import java.net.ProxySelector;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -15,8 +17,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.http.converter.HttpMessageConverter;
-import org.springframework.http.converter.json.MappingJacksonHttpMessageConverter;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.client.RestTemplate;
 
 /**
@@ -26,14 +27,14 @@ public class App {
     private static final String PASS = "Pass";
     private static final String IMPROVEMENT_REQUIRED = "Improvement Required";
     
-    private static final ArrayList<EstablishmentDetail> fives = new ArrayList<EstablishmentDetail>();
-    private static final ArrayList<EstablishmentDetail> fours = new ArrayList<EstablishmentDetail>();
-    private static final ArrayList<EstablishmentDetail> threes = new ArrayList<EstablishmentDetail>();
-    private static final ArrayList<EstablishmentDetail> twos = new ArrayList<EstablishmentDetail>();
-    private static final ArrayList<EstablishmentDetail> ones = new ArrayList<EstablishmentDetail>();
-    private static final ArrayList<EstablishmentDetail> zeros = new ArrayList<EstablishmentDetail>();
-    private static final ArrayList<EstablishmentDetail> passes = new ArrayList<EstablishmentDetail>();
-    private static final ArrayList<EstablishmentDetail> improvementRequireds = new ArrayList<EstablishmentDetail>();
+    private static final ArrayList<EstablishmentDetail> fives = new ArrayList<>();
+    private static final ArrayList<EstablishmentDetail> fours = new ArrayList<>();
+    private static final ArrayList<EstablishmentDetail> threes = new ArrayList<>();
+    private static final ArrayList<EstablishmentDetail> twos = new ArrayList<>();
+    private static final ArrayList<EstablishmentDetail> ones = new ArrayList<>();
+    private static final ArrayList<EstablishmentDetail> zeros = new ArrayList<>();
+    private static final ArrayList<EstablishmentDetail> passes = new ArrayList<>();
+    private static final ArrayList<EstablishmentDetail> improvementRequireds = new ArrayList<>();
     
     private static final List<ArrayList<EstablishmentDetail>> results = new ArrayList<ArrayList<EstablishmentDetail>>() {{
         add(fives);
@@ -48,21 +49,29 @@ public class App {
     
     private static RestTemplate restTemplate = new RestTemplate();
     
-    public static void main(String[] args) throws IOException {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setProxy(new Proxy(Type.HTTP, new InetSocketAddress("proxy.costcutterhq.com", 8080)));
-        restTemplate = new RestTemplate(requestFactory);
-//        restTemplate = new RestTemplate();
+    public static void main(String[] args) throws Exception {
+        System.setProperty("java.net.useSystemProxies", "true");
         
-        MappingJacksonHttpMessageConverter converter = new MappingJacksonHttpMessageConverter();
+        InetSocketAddress addr = (InetSocketAddress) ProxySelector.getDefault().select(new URI("http://www.yahoo.com/")).get(0).address();
+
+        if (addr == null) {
+            System.out.println("No Proxy");
+            restTemplate = new RestTemplate();
+        } else {
+            System.out.println("Using proxy " + addr.getHostName() + ':' + addr.getPort());
+            
+            SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+            requestFactory.setProxy(new Proxy(Type.HTTP, new InetSocketAddress(addr.getHostName(), addr.getPort())));
+            restTemplate = new RestTemplate(requestFactory);
+        }
+        
+        MappingJackson2HttpMessageConverter converter = new MappingJackson2HttpMessageConverter();
 
         converter.setSupportedMediaTypes(new ArrayList<MediaType>(){{
             add(new MediaType("text", "html"));
         }});
 
-        List<HttpMessageConverter<?>> mc = restTemplate.getMessageConverters();
-        mc.add(converter);
-        restTemplate.setMessageConverters(mc);
+        restTemplate.setMessageConverters(Arrays.asList(converter));
         
         for (String name : Collections.singletonList("Waitrose")) {
 //        for (String name : Arrays.asList("Waitrose", "Aldi", "Lidl", "Asda", "Morrisons", "Sainsburys", "Tesco")) {
@@ -128,14 +137,23 @@ public class App {
         String businessName = detail.getBusinessName();
         
         return !businessName.contains("Avenance") &&
+               !businessName.contains("avenance") &&
                !businessName.contains("Compass") &&
+               !businessName.contains("compass") &&
                !businessName.contains("Costa") &&
+               !businessName.contains("costa") &&
+               !businessName.contains("Distribution") &&
+               !businessName.contains("distribution") &&
                !businessName.contains("Eurest") &&
+               !businessName.contains("eurest") &&
                !businessName.contains("Greggs") &&
+               !businessName.contains("greggs") &&
                !businessName.contains("Krispy") &&
+               !businessName.contains("krispy") &&
+               !businessName.contains("Petrol") &&
+               !businessName.contains("petrol") &&
                !businessName.contains("Subway") &&
-               !businessName.contains("Avenance") &&
-               !businessName.contains("distribution");
+               !businessName.contains("subway");
     }
 
     private static void makeCall(String name) {
@@ -154,7 +172,7 @@ public class App {
         Result result = restTemplate.getForObject(url, Result.class);
         
         List<EstablishmentDetail> establishmentDetails = result.getFhrsEstablishment().getEstablishmentCollection().getEstablishmentDetails();
-//        establishmentDetails = removeDuplicates(establishmentDetails);
+        establishmentDetails = removeDuplicates(establishmentDetails);
         
         for (EstablishmentDetail detail : establishmentDetails) {
             if (goodDetail(detail)) {
@@ -197,7 +215,7 @@ public class App {
             fop.flush();
             fop.close();
         } catch (Exception ex) {
-            ex.printStackTrace();
+            System.out.println(ex.getMessage());
         } finally {
             try {
                 fop.close();
@@ -228,7 +246,7 @@ public class App {
     }
 
     private static List<EstablishmentDetail> removeDuplicates(List<EstablishmentDetail> establishmentDetails) {
-        Map<String, EstablishmentDetail> map = new HashMap<String, EstablishmentDetail>();
+        Map<String, EstablishmentDetail> map = new HashMap<>();
         
         for (EstablishmentDetail detail : establishmentDetails) {
             if (null == detail.getPostCode()) {
@@ -251,7 +269,7 @@ public class App {
             }
         }
         
-        return new ArrayList<EstablishmentDetail>(map.values());
+        return new ArrayList<>(map.values());
     }
 
     private static String getFormattedPostcode(EstablishmentDetail detail) {
