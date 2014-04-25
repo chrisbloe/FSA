@@ -36,8 +36,6 @@ public class EstablishmentDetail {
     @JsonProperty(value = "PostCode")
     private String postCode;
     
-    public EstablishmentDetail() { }
-
     public String getBusinessName() {
         return businessName;
     }

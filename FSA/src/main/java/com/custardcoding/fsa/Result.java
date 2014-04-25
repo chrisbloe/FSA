@@ -15,8 +15,6 @@ public class Result {
     @JsonProperty(value = "FHRSEstablishment")
     private FhrsEstablishment fhrsestablishment;
 
-    public Result() { }
-
     public FhrsEstablishment getFhrsEstablishment() {
         return fhrsestablishment;
     }

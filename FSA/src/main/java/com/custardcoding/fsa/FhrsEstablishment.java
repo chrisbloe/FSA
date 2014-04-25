@@ -15,8 +15,6 @@ public class FhrsEstablishment {
     @JsonProperty(value = "EstablishmentCollection")
     private EstablishmentCollection establishmentCollection;
 
-    public FhrsEstablishment() { }
-
     public EstablishmentCollection getEstablishmentCollection() {
         return establishmentCollection;
     }
