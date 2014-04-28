@@ -1,6 +1,3 @@
-/*
- * Copyright (c) 2013 Scottish Friendly Assurance. All Rights Reserved.
- */
 package com.custardcoding.fsa;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -11,15 +8,12 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * @author Kris Bloe
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class EstablishmentDetail {
+public class Establishment {
     @JsonProperty(value = "BusinessName")
     private String businessName;
     
     @JsonProperty(value = "RatingValue")
     private String ratingValue;
-    
-    @JsonProperty(value = "BusinessTypeID")
-    private int businessTypeID;
     
     @JsonProperty(value = "AddressLine1")
     private String addressLine1;
@@ -35,7 +29,7 @@ public class EstablishmentDetail {
     
     @JsonProperty(value = "PostCode")
     private String postCode;
-    
+
     public String getBusinessName() {
         return businessName;
     }
@@ -50,14 +44,6 @@ public class EstablishmentDetail {
 
     public void setRatingValue(String ratingValue) {
         this.ratingValue = ratingValue;
-    }
-
-    public int getBusinessTypeID() {
-        return businessTypeID;
-    }
-
-    public void setBusinessTypeID(int businessTypeID) {
-        this.businessTypeID = businessTypeID;
     }
 
     public String getAddressLine1() {

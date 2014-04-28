@@ -1,10 +1,8 @@
-/*
- * Copyright (c) 2013 Scottish Friendly Assurance. All Rights Reserved.
- */
 package com.custardcoding.fsa;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.ArrayList;
 
 /**
  *
@@ -12,14 +10,14 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Result {
-    @JsonProperty(value = "FHRSEstablishment")
-    private FhrsEstablishment fhrsestablishment;
+    @JsonProperty(value = "establishments")
+    private ArrayList<Establishment> establishments;
 
-    public FhrsEstablishment getFhrsEstablishment() {
-        return fhrsestablishment;
+    public ArrayList<Establishment> getEstablishments() {
+        return establishments;
     }
 
-    public void setFhrsEstablishment(FhrsEstablishment fhrsestablishment) {
-        this.fhrsestablishment = fhrsestablishment;
+    public void setEstablishments(ArrayList<Establishment> establishments) {
+        this.establishments = establishments;
     }
 }
