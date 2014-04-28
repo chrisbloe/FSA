@@ -1,6 +1,7 @@
 package com.custardcoding.fsa;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -15,24 +16,26 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.client.RestTemplate;
 
 /**
- * 
+ *
  */
 public class App {
 //    private static final List<String> businessList = Collections.singletonList("Waitrose");
     private static final List<String> businessList = Arrays.asList("Waitrose", "Aldi", "Lidl", "Asda", "Morrisons", "Sainsburys", "Tesco");
-    
+
 //    private static final int quantity = 20;
     private static final int quantity = 10000;
-    
+
     private static final String PASS = "Pass";
     private static final String IMPROVEMENT_REQUIRED = "Improvement Required";
-    
+
     private static final String FIVES = "fives";
     private static final String FOURS = "fours";
     private static final String THREES = "threes";
@@ -41,12 +44,15 @@ public class App {
     private static final String ZEROS = "zeros";
     private static final String PASSES = "passes";
     private static final String IMPROVEMENT_REQUIREDS = "improvementRequireds";
-    
+
     private static RestTemplate restTemplate = new RestTemplate();
-    
+    private static File parentFile;
+
     public static void main(String[] args) throws Exception {
-        System.setProperty("java.net.useSystemProxies", "true");
+        parentFile = new File(App.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath()).getParentFile();
         
+        System.setProperty("java.net.useSystemProxies", "true");
+
         InetSocketAddress addr = (InetSocketAddress) ProxySelector.getDefault().select(new URI("http://www.yahoo.com/")).get(0).address();
 
         if (addr == null) {
@@ -54,12 +60,12 @@ public class App {
             restTemplate = new RestTemplate();
         } else {
             System.out.println("Using proxy " + addr.getHostName() + ':' + addr.getPort());
-            
+
             SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
             requestFactory.setProxy(new Proxy(Type.HTTP, new InetSocketAddress(addr.getHostName(), addr.getPort())));
             restTemplate = new RestTemplate(requestFactory);
         }
-        
+
         MappingJackson2HttpMessageConverter converter = new MappingJackson2HttpMessageConverter();
 
         converter.setSupportedMediaTypes(new ArrayList<MediaType>(){{
@@ -67,24 +73,26 @@ public class App {
         }});
 
         restTemplate.setMessageConverters(Arrays.asList(converter));
-        
+
         System.out.println("Starting...");
         Long time = System.currentTimeMillis();
-        
+
         businessList.parallelStream().forEach((name) -> {
             makeCall(name);
         });
         
+        zipIt();
+
         System.out.println("...call took " + (System.currentTimeMillis() - time) / 1000 + "s");
     }
-    
+
     private static String getContent(Map<String, List<EstablishmentDetail>> results) {
         int maxSize = results.values()
                              .parallelStream()
                              .mapToInt(result -> result.size())
                              .max()
                              .getAsInt();
-        
+
         StringBuilder builder = new StringBuilder()
                 .append("\"5 (").append(results.get(FIVES).size()).append(")\",\"\",\"\",")
                 .append("\"4 (").append(results.get(FOURS).size()).append(")\",\"\",\"\",")
@@ -94,7 +102,7 @@ public class App {
                 .append("\"0 (").append(results.get(ZEROS).size()).append(")\",\"\",\"\",")
                 .append("\"Pass (").append(results.get(PASSES).size()).append(")\",\"\",\"\",")
                 .append("\"Improvement Required (").append(results.get(IMPROVEMENT_REQUIREDS).size()).append(")\",\"\",\"\"");
-        
+
         for (int i = 0; i < maxSize; i++) {
             builder.append('\n');
             addResult(builder, results.get(FIVES), i, true);
@@ -106,14 +114,14 @@ public class App {
             addResult(builder, results.get(PASSES), i, true);
             addResult(builder, results.get(IMPROVEMENT_REQUIREDS), i, false);
         }
-        
+
         return builder.toString();
     }
-    
+
     private static void addResult(StringBuilder builder, List<EstablishmentDetail> result, int i, boolean addComma) {
         try {
             EstablishmentDetail detail = result.get(i);
-            
+
             builder.append('\"')
                    .append(detail.getBusinessName())
                    .append("\",\"")
@@ -121,7 +129,7 @@ public class App {
                    .append("\",\"")
                    .append(detail.getPostCode())
                    .append('\"');
-            
+
             if (addComma) {
                 builder.append(',');
             }
@@ -132,7 +140,7 @@ public class App {
 
     private static boolean goodDetail(EstablishmentDetail detail) {
         String businessName = detail.getBusinessName();
-        
+
         return !businessName.contains("Avenance") &&
                !businessName.contains("avenance") &&
                !businessName.contains("Compass") &&
@@ -166,12 +174,12 @@ public class App {
         }};
 
         String url = "http://ratings.food.gov.uk/search/en-GB/" + name + "/^/1/" + quantity + "/json";
-        
+
         Result result = restTemplate.getForObject(url, Result.class);
-        
+
         List<EstablishmentDetail> establishmentDetails = result.getFhrsEstablishment().getEstablishmentCollection().getEstablishmentDetails();
         establishmentDetails = removeDuplicates(establishmentDetails);
-        
+
         establishmentDetails.parallelStream().forEach(detail -> {
             if (goodDetail(detail)) {
                 switch (detail.getRatingValue()) {
@@ -204,21 +212,21 @@ public class App {
                 }
             }
         });
-        
+
         createFile(name, results);
     }
-    
+
     private static void createFile(String name, Map<String, List<EstablishmentDetail>> results) {
         FileOutputStream fop = null;
         try {
-            File file = new File(new File(App.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath()).getParentFile(), name + ".csv");
-            
+            File file = new File(parentFile, name + ".csv");
+
             if (file.exists()) {
                 file.delete();
             }
-            
+
             file.createNewFile();
-            
+
             fop = new FileOutputStream(file);
             fop.write(getContent(results).getBytes());
             fop.flush();
@@ -234,29 +242,29 @@ public class App {
 
     private static StringBuilder getAddress(EstablishmentDetail establishmentDetail) {
         StringBuilder builder = new StringBuilder();
-        
+
         if (establishmentDetail.getAddressLine1() != null) {
             builder.append(establishmentDetail.getAddressLine1());
         }
-        
+
         if (establishmentDetail.getAddressLine2() != null) {
             builder.append(", ").append(establishmentDetail.getAddressLine2());
         }
-        
+
         if (establishmentDetail.getAddressLine3() != null) {
             builder.append(", ").append(establishmentDetail.getAddressLine3());
         }
-        
+
         if (establishmentDetail.getAddressLine4() != null) {
             builder.append(", ").append(establishmentDetail.getAddressLine4());
         }
-        
+
         return builder;
     }
 
     private static List<EstablishmentDetail> removeDuplicates(List<EstablishmentDetail> establishmentDetails) {
         Map<String, EstablishmentDetail> map = new HashMap<>();
-        
+
         establishmentDetails.stream().forEach((detail) -> {
             if (null == detail.getPostCode()) {
                 map.put(UUID.randomUUID().toString(), detail);
@@ -277,11 +285,52 @@ public class App {
                 }
             }
         });
-        
+
         return new ArrayList<>(map.values());
     }
 
     private static String getFormattedPostcode(EstablishmentDetail detail) {
         return detail.getPostCode().trim().replace(" ", "").toLowerCase();
+    }
+
+    private static void zipIt() {
+        try {
+            File zipFile = new File(parentFile, "FSA.zip");
+            
+            if (zipFile.exists()) {
+                zipFile.delete();
+            }
+
+            zipFile.createNewFile();
+
+            try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(zipFile))) {
+                byte[] buffer = new byte[1024];
+                
+                for (String fileName : businessList) {
+                    zos.putNextEntry(new ZipEntry(fileName + ".csv"));
+                    
+                    File file = new File(parentFile, fileName + ".csv");
+                    
+                    FileInputStream in = new FileInputStream(file);
+                    
+                    int len;
+                    while ((len = in.read(buffer)) > 0) {
+                        zos.write(buffer, 0, len);
+                    }
+                }
+                
+                zos.closeEntry();
+                
+                // Now delete the files
+                // https://stackoverflow.com/questions/991489/i-cant-delete-a-file-in-java
+                // http://bugs.java.com/bugdatabase/view_bug.do?bug_id=4715154
+                System.gc();
+                businessList.parallelStream().forEach((fileName) -> {
+                    new File(parentFile, fileName + ".csv").delete();
+                });
+            }
+        } catch (IOException ex) {
+            System.out.println("Oh dear: " + ex.getMessage());
+        }
     }
 }
