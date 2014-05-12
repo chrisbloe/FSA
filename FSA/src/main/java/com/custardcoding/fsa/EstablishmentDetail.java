@@ -11,29 +11,27 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class EstablishmentDetail {
     @JsonProperty(value = "BusinessName")
     private String businessName;
-    
+
     @JsonProperty(value = "RatingValue")
     private String ratingValue;
-    
+
     @JsonProperty(value = "BusinessTypeID")
     private int businessTypeID;
-    
+
     @JsonProperty(value = "AddressLine1")
     private String addressLine1;
-    
+
     @JsonProperty(value = "AddressLine2")
     private String addressLine2;
-    
+
     @JsonProperty(value = "AddressLine3")
     private String addressLine3;
-    
+
     @JsonProperty(value = "AddressLine4")
     private String addressLine4;
-    
+
     @JsonProperty(value = "PostCode")
     private String postCode;
-    
-    public EstablishmentDetail() { }
 
     public String getBusinessName() {
         return businessName;

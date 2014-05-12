@@ -1,6 +1,7 @@
 package com.custardcoding.fsa;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -15,6 +16,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
@@ -28,33 +31,42 @@ public class App {
     private static final String IMPROVEMENT_REQUIRED = "Improvement Required";
     private static final List<String> validRatings = Arrays.asList("5", "4", "3", "2", "1", "0", PASS, IMPROVEMENT_REQUIRED);
     
+    private static final String FIVES = "fives";
+    private static final String FOURS = "fours";
+    private static final String THREES = "threes";
+    private static final String TWOS = "twos";
+    private static final String ONES = "ones";
+    private static final String ZEROS = "zeros";
+    private static final String PASSES = "passes";
+    private static final String IMPROVEMENT_REQUIREDS = "improvementRequireds";
+    
     private static final List<String> establishmentList = Arrays.asList("Waitrose", "Aldi", "Lidl", "Asda", "Morrisons", "Sainsburys", "Tesco");
     
     private static final int limit = 10000;
     
-    private static final ArrayList<EstablishmentDetail> fives = new ArrayList<>();
-    private static final ArrayList<EstablishmentDetail> fours = new ArrayList<>();
-    private static final ArrayList<EstablishmentDetail> threes = new ArrayList<>();
-    private static final ArrayList<EstablishmentDetail> twos = new ArrayList<>();
-    private static final ArrayList<EstablishmentDetail> ones = new ArrayList<>();
-    private static final ArrayList<EstablishmentDetail> zeros = new ArrayList<>();
-    private static final ArrayList<EstablishmentDetail> passes = new ArrayList<>();
-    private static final ArrayList<EstablishmentDetail> improvementRequireds = new ArrayList<>();
-    
-    private static final List<ArrayList<EstablishmentDetail>> results = new ArrayList<ArrayList<EstablishmentDetail>>() {{
-        add(fives);
-        add(fours);
-        add(threes);
-        add(twos);
-        add(ones);
-        add(zeros);
-        add(passes);
-        add(improvementRequireds);
-    }};
-    
     private static RestTemplate restTemplate = new RestTemplate();
+    private static File parentFile;
     
     public static void main(String[] args) throws IOException, URISyntaxException {
+        parentFile = new File(App.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath()).getParentFile();
+        
+        sortProxy();
+        sortJacksonConverter();
+        
+        long time = System.currentTimeMillis();
+        
+        System.out.println("Starting...");
+        
+        establishmentList.parallelStream().forEach((name) -> {
+            makeCall(name);
+        });
+        
+        zipIt();
+        
+        System.out.println("...finished in " + (System.currentTimeMillis() - time) / 1000 + "s");
+    }
+
+    private static void sortProxy() throws URISyntaxException {
         System.setProperty("java.net.useSystemProxies", "true");
         InetSocketAddress addr = (InetSocketAddress) ProxySelector.getDefault().select(new URI("http://www.yahoo.com/")).get(0).address();
         
@@ -66,7 +78,9 @@ public class App {
             requestFactory.setProxy(new Proxy(Type.HTTP, new InetSocketAddress(addr.getHostName(), addr.getPort())));
             restTemplate = new RestTemplate(requestFactory);
         }
-        
+    }
+
+    private static void sortJacksonConverter() {
         MappingJackson2HttpMessageConverter converter = new MappingJackson2HttpMessageConverter();
 
         converter.setSupportedMediaTypes(new ArrayList<MediaType>() {{
@@ -74,47 +88,41 @@ public class App {
         }});
 
         restTemplate.setMessageConverters(Arrays.asList(converter));
-        
-        for (String name : establishmentList) {
-            makeCall(name);
-        }
     }
     
-    private static String getContent() {
-        int maxSize = 0;
-        
-        for (ArrayList<EstablishmentDetail> result : results) {
-            maxSize = result.size() > maxSize
-                    ? result.size()
-                    : maxSize;
-        }
+    private static String getContent(Map<String, List<EstablishmentDetail>> results) {
+        int maxSize = results.values()
+                             .parallelStream()
+                             .mapToInt(result -> result.size())
+                             .max()
+                             .getAsInt();
         
         StringBuilder builder = new StringBuilder()
-                .append("\"5 (").append(fives.size()).append(")\",\"\",\"\",")
-                .append("\"4 (").append(fours.size()).append(")\",\"\",\"\",")
-                .append("\"3 (").append(threes.size()).append(")\",\"\",\"\",")
-                .append("\"2 (").append(twos.size()).append(")\",\"\",\"\",")
-                .append("\"1 (").append(ones.size()).append(")\",\"\",\"\",")
-                .append("\"0 (").append(zeros.size()).append(")\",\"\",\"\",")
-                .append("\"Pass (").append(passes.size()).append(")\",\"\",\"\",")
-                .append("\"Improvement Required (").append(improvementRequireds.size()).append(")\",\"\",\"\"");
+                .append("\"5 (").append(results.get(FIVES).size()).append(")\",\"\",\"\",")
+                .append("\"4 (").append(results.get(FOURS).size()).append(")\",\"\",\"\",")
+                .append("\"3 (").append(results.get(THREES).size()).append(")\",\"\",\"\",")
+                .append("\"2 (").append(results.get(TWOS).size()).append(")\",\"\",\"\",")
+                .append("\"1 (").append(results.get(ONES).size()).append(")\",\"\",\"\",")
+                .append("\"0 (").append(results.get(ZEROS).size()).append(")\",\"\",\"\",")
+                .append("\"Pass (").append(results.get(PASSES).size()).append(")\",\"\",\"\",")
+                .append("\"Improvement Required (").append(results.get(IMPROVEMENT_REQUIREDS).size()).append(")\",\"\",\"\"");
         
         for (int i = 0; i < maxSize; i++) {
             builder.append('\n');
-            addResult(builder, fives, i, true);
-            addResult(builder, fours, i, true);
-            addResult(builder, threes, i, true);
-            addResult(builder, twos, i, true);
-            addResult(builder, ones, i, true);
-            addResult(builder, zeros, i, true);
-            addResult(builder, passes, i, true);
-            addResult(builder, improvementRequireds, i, false);
+            addResult(builder, results.get(FIVES), i, true);
+            addResult(builder, results.get(FOURS), i, true);
+            addResult(builder, results.get(THREES), i, true);
+            addResult(builder, results.get(TWOS), i, true);
+            addResult(builder, results.get(ONES), i, true);
+            addResult(builder, results.get(ZEROS), i, true);
+            addResult(builder, results.get(PASSES), i, true);
+            addResult(builder, results.get(IMPROVEMENT_REQUIREDS), i, false);
         }
         
         return builder.toString();
     }
     
-    private static void addResult(StringBuilder builder, ArrayList<EstablishmentDetail> result, int i, boolean addComma) {
+    private static void addResult(StringBuilder builder, List<EstablishmentDetail> result, int i, boolean addComma) {
         try {
             EstablishmentDetail detail = result.get(i);
             
@@ -150,14 +158,16 @@ public class App {
     }
 
     private static void makeCall(String name) {
-        fives.clear();
-        fours.clear();
-        threes.clear();
-        twos.clear();
-        ones.clear();
-        zeros.clear();
-        passes.clear();
-        improvementRequireds.clear();
+        Map<String, List<EstablishmentDetail>> results = new HashMap<String, List<EstablishmentDetail>>() {{
+            put(FIVES, new ArrayList<>());
+            put(FOURS, new ArrayList<>());
+            put(THREES, new ArrayList<>());
+            put(TWOS, new ArrayList<>());
+            put(ONES, new ArrayList<>());
+            put(ZEROS, new ArrayList<>());
+            put(PASSES, new ArrayList<>());
+            put(IMPROVEMENT_REQUIREDS, new ArrayList<>());
+        }};
 
         String url = "http://ratings.food.gov.uk/search/en-GB/" + name + "/^/1/" + limit + "/json";
         
@@ -166,33 +176,44 @@ public class App {
         List<EstablishmentDetail> establishmentDetails = result.getFhrsEstablishment().getEstablishmentCollection().getEstablishmentDetails();
         establishmentDetails = removeBadEntriesAndDuplicates(establishmentDetails);
         
-        for (EstablishmentDetail detail : establishmentDetails) {
-            if (detail.getRatingValue().equals("5")) {
-                fives.add(detail);
-            } else if (detail.getRatingValue().equals("4")) {
-                fours.add(detail);
-            } else if (detail.getRatingValue().equals("3")) {
-                threes.add(detail);
-            } else if (detail.getRatingValue().equals("2")) {
-                twos.add(detail);
-            } else if (detail.getRatingValue().equals("1")) {
-                ones.add(detail);
-            } else if (detail.getRatingValue().equals("0")) {
-                zeros.add(detail);
-            } else if (detail.getRatingValue().equalsIgnoreCase(PASS)) {
-                passes.add(detail);
-            } else if (detail.getRatingValue().equalsIgnoreCase(IMPROVEMENT_REQUIRED)) {
-                improvementRequireds.add(detail);
+        establishmentDetails.parallelStream().forEach(detail -> {
+            switch (detail.getRatingValue()) {
+                case "5":
+                    results.get(FIVES).add(detail);
+                    break;
+                case "4":
+                    results.get(FOURS).add(detail);
+                    break;
+                case "3":
+                    results.get(THREES).add(detail);
+                    break;
+                case "2":
+                    results.get(TWOS).add(detail);
+                    break;
+                case "1":
+                    results.get(ONES).add(detail);
+                    break;
+                case "0":
+                    results.get(ZEROS).add(detail);
+                    break;
+                case PASS:
+                    results.get(PASSES).add(detail);
+                    break;
+                case IMPROVEMENT_REQUIRED:
+                    results.get(IMPROVEMENT_REQUIREDS).add(detail);
+                    break;
+                default:
+                    System.out.println("Bad value: " + detail.getRatingValue());
             }
-        } 
+        });
         
-        createFile(name);
+        createFile(name, results);
     }
     
-    private static void createFile(String name) {
+    private static void createFile(String name, Map<String, List<EstablishmentDetail>> results) {
         FileOutputStream fop = null;
         try {
-            File file = new File(new File(App.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath()).getParentFile(), name + ".csv");
+            File file = new File(parentFile, name + ".csv");
             
             if (file.exists()) {
                 file.delete();
@@ -201,7 +222,7 @@ public class App {
             file.createNewFile();
             
             fop = new FileOutputStream(file);
-            fop.write(getContent().getBytes());
+            fop.write(getContent(results).getBytes());
             fop.flush();
             fop.close();
         } catch (Exception ex) {
@@ -238,33 +259,72 @@ public class App {
     private static List<EstablishmentDetail> removeBadEntriesAndDuplicates(List<EstablishmentDetail> establishmentDetails) {
         Map<String, EstablishmentDetail> map = new HashMap<>();
         
-        for (EstablishmentDetail detail : establishmentDetails) {
-            if (goodDetail(detail)) {
-                if (null == detail.getPostCode() || detail.getPostCode().isEmpty() || detail.getPostCode().equalsIgnoreCase("null")) {
-                    map.put(UUID.randomUUID().toString(), detail);
-                } else {
-                    String formattedPostcode = getFormattedPostcode(detail);
-                    if (map.containsKey(formattedPostcode)) {
-                        try {
-                            if (Integer.valueOf(map.get(formattedPostcode).getRatingValue()) > Integer.valueOf(detail.getRatingValue())) {
-                                map.put(formattedPostcode, detail);
-                            }
-                        } catch (NumberFormatException ex) {
-                            if (PASS.equals(map.get(formattedPostcode).getRatingValue())) {
-                                map.put(formattedPostcode, detail);
-                            }
+        establishmentDetails.stream().filter(detail -> goodDetail(detail)).forEach((detail) -> {
+            if (null == detail.getPostCode() || detail.getPostCode().isEmpty() || detail.getPostCode().equalsIgnoreCase("null")) {
+                map.put(UUID.randomUUID().toString(), detail);
+            } else {
+                String formattedPostcode = getFormattedPostcode(detail);
+                if (map.containsKey(formattedPostcode)) {
+                    try {
+                        if (Integer.valueOf(map.get(formattedPostcode).getRatingValue()) > Integer.valueOf(detail.getRatingValue())) {
+                            map.put(formattedPostcode, detail);
                         }
-                    } else {
-                        map.put(formattedPostcode, detail);
+                    } catch (NumberFormatException ex) {
+                        if (PASS.equals(map.get(formattedPostcode).getRatingValue())) {
+                            map.put(formattedPostcode, detail);
+                        }
                     }
+                } else {
+                    map.put(formattedPostcode, detail);
                 }
             }
-        }
+        });
         
         return new ArrayList<>(map.values());
     }
 
     private static String getFormattedPostcode(EstablishmentDetail detail) {
         return detail.getPostCode().trim().replace(" ", "").toLowerCase();
+    }
+    
+    private static void zipIt() {
+        try {
+            File zipFile = new File(parentFile, "FSA.zip");
+            
+            if (zipFile.exists()) {
+                zipFile.delete();
+            }
+
+            zipFile.createNewFile();
+
+            try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(zipFile))) {
+                byte[] buffer = new byte[1024];
+                
+                for (String fileName : establishmentList) {
+                    zos.putNextEntry(new ZipEntry(fileName + ".csv"));
+                    
+                    File file = new File(parentFile, fileName + ".csv");
+                    
+                    FileInputStream in = new FileInputStream(file);
+                    
+                    int len;
+                    while ((len = in.read(buffer)) > 0) {
+                        zos.write(buffer, 0, len);
+                    }
+                }
+                
+                zos.closeEntry();
+                
+                // Now delete the files
+                // https://stackoverflow.com/questions/991489/i-cant-delete-a-file-in-java
+                // http://bugs.java.com/bugdatabase/view_bug.do?bug_id=4715154
+                System.gc();
+                establishmentList.parallelStream().forEach((fileName) -> {
+                    new File(parentFile, fileName + ".csv").delete();
+                });
+            }
+        } catch (IOException ex) {
+            System.out.println("Oh dear: " + ex.getMessage());
+        }
     }
 }

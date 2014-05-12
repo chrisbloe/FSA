@@ -13,8 +13,6 @@ public class EstablishmentCollection {
     @JsonProperty(value = "EstablishmentDetail")
     private ArrayList<EstablishmentDetail> establishmentDetails;
 
-    public EstablishmentCollection() { }
-
     public ArrayList<EstablishmentDetail> getEstablishmentDetails() {
         return establishmentDetails;
     }
