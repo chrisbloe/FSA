@@ -1,6 +1,3 @@
-/*
- * Copyright (c) 2013 Scottish Friendly Assurance. All Rights Reserved.
- */
 package com.custardcoding.fsa;
 
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
