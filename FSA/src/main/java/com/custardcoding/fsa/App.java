@@ -57,9 +57,16 @@ public class App {
         
         System.out.println("Starting...");
         
+        StringBuilder html = new StringBuilder(getHTMLHeader());
+        
         establishmentList.parallelStream().forEach((name) -> {
-            makeCall(name);
+            Map<String, List<EstablishmentDetail>> result = makeCall(name);
+            html.append(createJSForHTML(result, name));
         });
+        
+        html.append(getHTMLFooter());
+        
+        createFile("results.html", html.toString());
         
         zipIt();
         
@@ -157,7 +164,7 @@ public class App {
                validRatings.contains(detail.getRatingValue());
     }
 
-    private static void makeCall(String name) {
+    private static Map<String, List<EstablishmentDetail>> makeCall(String name) {
         Map<String, List<EstablishmentDetail>> results = new HashMap<String, List<EstablishmentDetail>>() {{
             put(FIVES, new ArrayList<>());
             put(FOURS, new ArrayList<>());
@@ -207,13 +214,15 @@ public class App {
             }
         });
         
-        createFile(name, results);
+        createFile(name + ".csv", getContent(results));
+        
+        return results;
     }
     
-    private static void createFile(String name, Map<String, List<EstablishmentDetail>> results) {
+    private static void createFile(String name, String content) {
         FileOutputStream fop = null;
         try {
-            File file = new File(parentFile, name + ".csv");
+            File file = new File(parentFile, name);
             
             if (file.exists()) {
                 file.delete();
@@ -222,7 +231,7 @@ public class App {
             file.createNewFile();
             
             fop = new FileOutputStream(file);
-            fop.write(getContent(results).getBytes());
+            fop.write(content.getBytes());
             fop.flush();
             fop.close();
         } catch (Exception ex) {
@@ -303,14 +312,22 @@ public class App {
                 for (String fileName : establishmentList) {
                     zos.putNextEntry(new ZipEntry(fileName + ".csv"));
                     
-                    File file = new File(parentFile, fileName + ".csv");
-                    
-                    FileInputStream in = new FileInputStream(file);
+                    FileInputStream in = new FileInputStream(new File(parentFile, fileName + ".csv"));
                     
                     int len;
                     while ((len = in.read(buffer)) > 0) {
                         zos.write(buffer, 0, len);
                     }
+                }
+                
+                // Now do the results file
+                zos.putNextEntry(new ZipEntry("results.html"));
+
+                FileInputStream in = new FileInputStream(new File(parentFile, "results.html"));
+
+                int len;
+                while ((len = in.read(buffer)) > 0) {
+                    zos.write(buffer, 0, len);
                 }
                 
                 zos.closeEntry();
@@ -322,9 +339,59 @@ public class App {
                 establishmentList.parallelStream().forEach((fileName) -> {
                     new File(parentFile, fileName + ".csv").delete();
                 });
+                
+                new File(parentFile, "results.html").delete();
             }
         } catch (IOException ex) {
             System.out.println("Oh dear: " + ex.getMessage());
         }
+    }
+
+    private static String createJSForHTML(Map<String, List<EstablishmentDetail>> result, String name) {
+        return "var data_" + name + "= google.visualization.arrayToDataTable(["
+                + "['Result', 'Quantity'], "
+                + "['5', " + result.get(FIVES).size() + "], "
+                + "['4', " + result.get(FOURS).size() + "], "
+                + "['3', " + result.get(THREES).size() + "], "
+                + "['2', " + result.get(TWOS).size() + "], "
+                + "['1', " + result.get(ONES).size() + "], "
+                + "['0', " + result.get(ZEROS).size() + "], "
+                + "['Pass', " + result.get(PASSES).size() + "], "
+                + "['Improvement Required', " + result.get(IMPROVEMENT_REQUIREDS).size() + ']'
+                + "]);\n\n"
+                
+                + "var options_" + name + " = {"
+                +     "title: '" + name + "', "
+                +     "legend: {alignment: 'center'}, "
+                +     "width: 400"
+                + "};\n\n"
+                
+                + "new google.visualization.PieChart(document.getElementById('chart_div_" + name + "')).draw(data_" + name + ", options_" + name + ");\n\n";
+    }
+
+    private static String getHTMLHeader() {
+        return "<html>"
+                +  "<head>"
+                +      "<script type=\"text/javascript\" src=\"https://www.google.com/jsapi\"></script>"
+                +      "<script type=\"text/javascript\">"
+                +          "google.load(\"visualization\", \"1\", {packages:[\"corechart\"]});"
+                +          "google.setOnLoadCallback(drawCharts);\n\n"
+        
+                +          "function drawCharts() {";
+    }
+
+    private static String getHTMLFooter() {
+        String footer =    "}"
+             +         "</script>"
+             +     "</head>"
+             +     "<body>";
+        
+        for (String establishment : establishmentList) {
+            footer += "<div id=\"chart_div_" + establishment + "\" style=\"width: 250px; height: 250px;\"></div>";
+        }
+        
+        return footer
+             +     "</body>"
+             + "</html>";
     }
 }
